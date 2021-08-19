@@ -1,4 +1,4 @@
-import rgkit.rg as rg
+import rgkit as rg
 
 
 class Robot:
