@@ -25,4 +25,4 @@ Team meeting room is **202-C**.
 Submit via WebCat at [https://asulearn.appstate.edu/mod/page/view.php?id=1858390](https://asulearn.appstate.edu/mod/page/view.php?id=1858390).
 - How to easily compile the submission? 
   - `cd` to the parent directiory of the repo.
-  - `rm -i submission.zip || zip -r submission.zip robotgame/` - This will zip the repo up and attempt to ask you if you'd like to erase a previous submission if it exists. (If asking is annoying - remove the `-i` flag)
+  - `rm -i submission.zip || true && zip -r submission.zip robotgame/` - This will zip the repo up and attempt to ask you if you'd like to erase a previous submission if it exists. (If asking is annoying - remove the `-i` flag)
