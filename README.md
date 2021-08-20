@@ -35,7 +35,7 @@ Team meeting room is **202-C**.
  - click existing enviorment and select the class one from the dropdown
  - click ok
  - in the terminal type exit and then reopen it
- - run  python3 rgkit/run.py p01.py p01.py
+ - run  python3 (or python instead of python3) rgkit/run.py p01.py p01.py
 
 # Submitting
 Submit via WebCat at [https://asulearn.appstate.edu/mod/page/view.php?id=1858390](https://asulearn.appstate.edu/mod/page/view.php?id=1858390).
