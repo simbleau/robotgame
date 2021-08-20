@@ -24,7 +24,7 @@ class Robot:
         for loc, bot in game.robots.items():
             # print(str(bot))
             if bot.player_id != self.player_id:
-                if rg.dist(loc, self.location) <= 1:
+                if rg.wdist(loc, self.location) <= 1:
                     if self.hp < max(rg.settings.attack_range):
                         return ['suicide']
                     else:
