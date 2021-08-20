@@ -41,16 +41,16 @@ class Robot:
         t = rg.CENTER_POINT
         x = 99
         for loc, bot in game.robots.items():
-            print(game.robots.items())
+            #print(game.robots.items())
             if bot.player_id != self.player_id and rg.wdist(loc, self.location) < x:
-                print(x)
+                #print(x)
                 t = loc
                 x = rg.wdist(loc, self.location)
-        print(rg.toward(self.location, t))
+        #print(rg.toward(self.location, t))
         if 'obstacle' not in rg.loc_types(rg.toward(self.location, t)) \
                 and 'invalid' not in rg.loc_types(rg.toward(self.location, t)) \
                 and 'spawn' not in rg.loc_types(rg.toward(self.location, t)) and x < 50:
-            print("moved", t, x)
+            #print("moved", t, x)
             return ['move', (rg.toward(self.location, t))]
 
         elif rg.locs_around(self.location, filter_out=('invalid', 'spawn', 'obstacle')):
@@ -69,5 +69,5 @@ class Robot:
                         return ['attack', loc]
         return None
 
-    def __del__(self):
-        print(self.val)
+    #def __del__(self):
+        #print(self.val)
