@@ -21,6 +21,22 @@ Team meeting room is **202-C**.
  - The Robot class is in p01.py 
    - p01.py must be called p01.py per Dr. Parry's test files.
 
+ - Install Python 3.7+
+ - Install Anaconda 3
+ - Install Pycharm Community or Pro (Free for students)
+ - open pycharm and click git in the toolbar and select clone
+ - clone the repo https://github.com/simbleau/robotgame.git
+ - install the conda enviroment in the git repo
+   - in windows open conda prompt in linux any old terminal
+   - run conda env create -f cs5440.yml in git directory
+ - in pycharm click the gear in the upper right hand corner of the window 
+ - click settings
+ - click the gear next to python interpreter and click add
+ - click existing enviorment and select the class one from the dropdown
+ - click ok
+ - in the terminal type exit and then reopen it
+ - run  python3 (or python instead of python3) rgkit/run.py p01.py p01.py
+
 # Submitting
 Submit via WebCat at [https://asulearn.appstate.edu/mod/page/view.php?id=1858390](https://asulearn.appstate.edu/mod/page/view.php?id=1858390).
 - How to easily compile the submission? 
