@@ -71,70 +71,44 @@ class Robot:
         # TODO put this in a "round_init()" method
         # If the turn has updated, run init code for the round
         if game.turn != self.turn:
-            self.turn = game.turn
-            player_bots = []
-            for robot in game.robots:
-                if 'robot_id' in game.robots[robot].keys():
-                    player_bots.append(game.robots[robot])
-            bots_per_quadrant = len(player_bots) / 4
-            q_bots = {0: [], 1: [], 2: [], 3: []}
-            for bot in player_bots:
-                q_bots[find_nearest_quadrant(bot['location'])].append(bot)
-            for q in q_bots:
-                while bots_per_quadrant - len(q_bots[q]) > 1:
-                    q_bots = move_closest_bot(q, q_bots, bots_per_quadrant, self.formation_n_bots[q][min(7, int(bots_per_quadrant))])
+            self.init_round(game)
 
-            self.maze = game_to_maze(game)
-            self.formation_locations = {}
-            for q in q_bots:
-                if len(q_bots[q]) > 0:
-                    locations = self.formation_n_bots[q][min(len(q_bots[q]), 7)]
-                    for b in range(len(q_bots[q])):
-                        if b < 7:
-                            self.formation_locations[q_bots[q][b]['robot_id']] = locations[b]
-                        else:
-                            self.formation_locations[q_bots[q][b]['robot_id']] = None
-
-        # TODO better attack routine and rules
-        # If no formation is found for this bot, suicide
-        if self.formation_locations[self.robot_id] is None:
-            return ['suicide']
-        # Determine when to attack enemies
+        # Scan for enemies with a view length
+        view_length = 2  # The amount of tiles away our robots will search for enemies
+        seen_enemies = []
         for robot in game.robots:
-            # Do not attack friendly robots
+            # Do not consider friendly robots
             if game.robots[robot]['player_id'] == self.player_id:
                 continue
             # Attack bots that are close enough
             robot_loc = game.robots[robot]['location']
             dist = rg.dist(self.location, robot_loc)
-            if dist == 1:
-                return ["attack", robot_loc]
+            if dist <= view_length:
+                seen_enemies.append(game.robots[robot])
 
-        # TODO better guard logic
-        if self.location == self.formation_locations[self.robot_id]:
-            return ['guard']
+        # Suicide routine
+        # Reduce seen enemies to only those which can attack us
+        potential_attackers = self.reduce_to_adjacent(seen_enemies)
+        potential_damage_intake = len(potential_attackers) * 9  # Robots do 8-10 damage per turn. Avg is 9.
+        # Suicide if we can die to the attackers around us
+        if (self.hp - potential_damage_intake) <= 0:
+            return ['suicide']  # This deals 15 damage
 
-        # TODO better logic on *when* to path-find
-        # Path-find to formation
-        dest = self.formation_locations[self.robot_id]
-        last_state = self.maze[dest[0]][dest[1]]
-        self.maze[dest[0]][dest[1]] = 0
-        path = astar(self.maze, self.location, self.formation_locations[self.robot_id])
-        self.maze[dest[0]][dest[1]] = last_state
-        if path is None:
-            # No path found - Guard (or potentially suicide here?)
-            return ['guard']
-        else:
-            if len(path) > 1:
-                path.pop(0)
+        # Attack routine
+        # If we are not suiciding, check if we should attack anyone.
+        weakest_enemy = self.reduce_to_weakest(seen_enemies)
+        if weakest_enemy is not None:
+            weakest_loc = weakest_enemy['location']
+            dist_to_weakest = rg.dist(self.location, weakest_loc)
+            if dist_to_weakest == 1:
+                return ['attack', weakest_loc]
             else:
-                return ['guard']
-            # Move towards formation
-            step_to_take = path[0]  # The step in the path found to formation
-            # Treat the step as an obstacle for future robots during pathfinding (avoid self-collisions)
-            self.maze[step_to_take[0]][step_to_take[1]] = 1  # 1 = Obstacle
-            # Submit move turn
-            return ['move', step_to_take]
+                # move towards enemy
+                return self.move_to(weakest_loc)
+        else:
+            # move towards formation
+            dest = self.formation_locations[self.robot_id]
+            return self.move_to(dest)
 
     def formation_routine(self):
         # TODO
@@ -144,9 +118,35 @@ class Robot:
         # TODO
         pass
 
-    def init_round(self):
-        # TODO
-        pass
+    def init_round(self, game):
+        # TODO assign formation locations to bots based on closest distance instead of randomly
+        self.turn = game.turn
+        player_bots = []
+        for robot in game.robots:
+            if 'robot_id' in game.robots[robot].keys():
+                player_bots.append(game.robots[robot])
+        bots_per_quadrant = len(player_bots) / 4
+        q_bots = {0: [], 1: [], 2: [], 3: []}
+        for bot in player_bots:
+            q_bots[find_nearest_quadrant(bot['location'])].append(bot)
+        for q in q_bots:
+            while abs(bots_per_quadrant - len(q_bots[q])) > 1:
+                if bots_per_quadrant > len(q_bots[q]):
+                    q_bots = move_from_closest_quadrant(q, q_bots, bots_per_quadrant,
+                                                        self.formation_n_bots[q][min(7, int(bots_per_quadrant))])
+                else:
+                    q_bots = move_to_closest_quadrant(q, q_bots, bots_per_quadrant)
+
+        self.maze = game_to_maze(game)
+        self.formation_locations = {}
+        for q in q_bots:
+            if len(q_bots[q]) > 0:
+                locations = self.formation_n_bots[q][min(len(q_bots[q]), 7)]
+                for b in range(len(q_bots[q])):
+                    if b < 7:
+                        self.formation_locations[q_bots[q][b]['robot_id']] = locations[b]
+                    else:
+                        self.formation_locations[q_bots[q][b]['robot_id']] = None
 
 
 def find_nearest_quadrant(loc):
@@ -165,7 +165,7 @@ def find_nearest_quadrant(loc):
             return 3
 
 
-def move_closest_bot(q_move_to, quadrants, bots_per_quadrant, formation):
+def move_from_closest_quadrant(q_move_to, quadrants, bots_per_quadrant, formation):
     """
     TODO Document
     """
@@ -185,6 +185,15 @@ def move_closest_bot(q_move_to, quadrants, bots_per_quadrant, formation):
     quadrants[q_move_to].append(closest_bot)
     quadrants[closest_bot_quadrant].pop(closest_bot_index)
     return quadrants
+
+
+def move_to_closest_quadrant(q_move_from, quadrants, bots_per_quadrant):
+    # TODO improve logic to choose quadrant to move to
+    for q in quadrants:
+        if len(quadrants[q]) < bots_per_quadrant:
+            quadrants[q].append(quadrants[q_move_from][0])
+            quadrants[q_move_from].pop(0)
+            return quadrants
 
 
 def game_to_maze(game):
