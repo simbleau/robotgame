@@ -55,6 +55,46 @@ class Robot:
                                 5: [(10, 14), (11, 13), (12, 12), (13, 11), (14, 10)],
                                 6: [(10, 15), (11, 14), (12, 13), (13, 12), (14, 11), (15, 10)],
                                 7: [(10, 16), (11, 15), (12, 14), (13, 13), (14, 12), (15, 11), (16, 10)]}}
+        self.checkerboard = []
+        x = 0
+        y = -1
+        direction = 'up'
+        limit = 1
+        while -9 < x < 9 and -9 < y < 9:
+            self.checkerboard.append((x + 9, y + 9))
+            if direction == 'up':
+                if x + 2 > limit:
+                    direction = 'right'
+                    x += 1
+                    y += 1
+                else:
+                    x += 2
+            elif direction == 'right':
+                if y + 2 > limit:
+                    direction = 'down'
+                    x -= 1
+                    y += 1
+                else:
+                    y += 2
+            elif direction == 'down':
+                if abs(x - 2) > limit:
+                    direction = 'left'
+                    x -= 1
+                    y -= 1
+                else:
+                    x -= 2
+            else:
+                if abs(y - 2) > limit:
+                    direction = 'up'
+                    limit += 1
+                    y -= 2
+                else:
+                    y -= 2
+        print(self.checkerboard)
+
+    def submit_act(self, act):
+        self.last_act = act
+        return act
 
     def act(self, game):
         """
@@ -174,28 +214,30 @@ class Robot:
         for robot in game.robots:
             if 'robot_id' in game.robots[robot].keys():
                 player_bots.append(game.robots[robot])
-        bots_per_quadrant = len(player_bots) / 4
-        q_bots = {0: [], 1: [], 2: [], 3: []}
-        for bot in player_bots:
-            q_bots[find_nearest_quadrant(bot['location'])].append(bot)
-        for q in q_bots:
-            while abs(bots_per_quadrant - len(q_bots[q])) > 1:
-                if bots_per_quadrant > len(q_bots[q]):
-                    q_bots = move_from_closest_quadrant(q, q_bots, bots_per_quadrant,
-                                                        self.formation_n_bots[q][min(7, int(bots_per_quadrant))])
-                else:
-                    q_bots = move_to_closest_quadrant(q, q_bots, bots_per_quadrant)
-
+        # bots_per_quadrant = len(player_bots) / 4
+        # q_bots = {0: [], 1: [], 2: [], 3: []}
+        # for bot in player_bots:
+        #     q_bots[find_nearest_quadrant(bot['location'])].append(bot)
+        # for q in q_bots:
+        #     while abs(bots_per_quadrant - len(q_bots[q])) > 1:
+        #         if bots_per_quadrant > len(q_bots[q]):
+        #             q_bots = move_from_closest_quadrant(q, q_bots, bots_per_quadrant,
+        #                                                 self.formation_n_bots[q][min(7, int(bots_per_quadrant))])
+        #         else:
+        #             q_bots = move_to_closest_quadrant(q, q_bots, bots_per_quadrant)
+        #
         self.maze = game_to_maze(game)
         self.formation_locations = {}
-        for q in q_bots:
-            if len(q_bots[q]) > 0:
-                locations = self.formation_n_bots[q][min(len(q_bots[q]), 7)]
-                for b in range(len(q_bots[q])):
-                    if b < 7:
-                        self.formation_locations[q_bots[q][b]['robot_id']] = locations[b]
-                    else:
-                        self.formation_locations[q_bots[q][b]['robot_id']] = None
+        # for q in q_bots:
+        #     if len(q_bots[q]) > 0:
+        #         locations = self.formation_n_bots[q][min(len(q_bots[q]), 7)]
+        #         for b in range(len(q_bots[q])):
+        #             if b < 7:
+        #                 self.formation_locations[q_bots[q][b]['robot_id']] = locations[b]
+        #             else:
+        #                 self.formation_locations[q_bots[q][b]['robot_id']] = None
+        for bot in range(len(player_bots)):
+            self.formation_locations[player_bots[bot]['robot_id']] = self.checkerboard[bot]
 
 
 def find_nearest_quadrant(loc):
