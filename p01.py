@@ -68,7 +68,6 @@ class Robot:
         """
         # TODO modularize this code into methods
 
-        # TODO put this in a "round_init()" method
         # If the turn has updated, run init code for the round
         if game.turn != self.turn:
             self.init_round(game)
@@ -117,6 +116,56 @@ class Robot:
     def attack_routine(self):
         # TODO
         pass
+
+    def move_to(self, dest):
+        # Path-find to formation
+        last_state = self.maze[dest[0]][dest[1]]
+        self.maze[dest[0]][dest[1]] = 0
+        path = astar(self.maze, self.location, dest)
+        self.maze[dest[0]][dest[1]] = last_state
+        if path is None:
+            # No path found - Guard (or potentially suicide here?)
+            return ['guard']
+        else:
+            if len(path) > 1:
+                path.pop(0)
+            else:
+                return ['guard']
+            # Move towards formation
+            step_to_take = path[0]  # The step in the path found to formation
+            # Treat the step as an obstacle for future robots during pathfinding (avoid self-collisions)
+            self.maze[step_to_take[0]][step_to_take[1]] = 1  # 1 = Obstacle
+            # Submit move turn
+            return ['move', step_to_take]
+
+    def reduce_to_adjacent(self, robots):
+        """
+        Given an array of robots, return the robots immediately adjacent to self.
+        """
+        adjacent = []
+        for robot in robots:
+            dist = rg.dist(self.location, robot['location'])
+            if dist <= 1:
+                adjacent.append(robot)
+        return adjacent
+
+    def reduce_to_weakest(self, robots):
+        """
+        Given an array of robots, prioritizing health, then distance in the list.
+        """
+        weakest = None
+        for robot in robots:
+            if weakest is None:
+                weakest = robot
+                continue
+            if robot['hp'] < weakest['hp']:
+                weakest = robot
+            elif robot['hp'] == weakest['hp']:
+                dist_to_robot = rg.dist(self.location, robot['location'])
+                dist_to_weakest = rg.dist(self.location, weakest['location'])
+                if dist_to_robot < dist_to_weakest:
+                    weakest = robot
+        return weakest
 
     def init_round(self, game):
         # TODO assign formation locations to bots based on closest distance instead of randomly
