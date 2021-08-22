@@ -256,7 +256,10 @@ def astar(maze, start, end):
     open_list.append(start_node)
 
     # Loop until you find the end
-    while len(open_list) > 0:
+    recursion = 0
+    while len(open_list) > 0 and recursion < 50:
+        recursion += 1
+
         # Get the current node
         current_node = open_list[0]
         current_index = 0
