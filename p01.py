@@ -5,26 +5,11 @@ A bot which explores quadrant domination.
 Authors: Matt Sterckx, Spencer Imbleau
 """
 
-"""
-TODO - Average the quadrant sizes during turns.
-
-Pseudo code below.
-
-avg = find_quadrant_avg();
-for quadrant in quadrants:
-    quadrant_total = find_quadrant_total(quadrant)
-    quadrant_difference = avg - quadrant_total # will be positive if there are less than avg
-    while (quadrant_difference > 1):
-        # this quadrant has not enough bots
-        bot_to_move = find_closest_ally(quadrant) # do not accept allies from this quadrant
-        move(bot_to_move, quadrant)
-        quadrant_difference -= 1
-"""
-
 
 class Robot:
     def __init__(self):
         self.turn = -1
+        self.last_act = None
         # TODO self.formation_n_bots should be based on dynamic input
         self.formation_n_bots = {
                             0: {1: [(8, 8)],
@@ -131,7 +116,7 @@ class Robot:
         potential_damage_intake = len(potential_attackers) * 9  # Robots do 8-10 damage per turn. Avg is 9.
         # Suicide if we can die to the attackers around us
         if (self.hp - potential_damage_intake) <= 0:
-            return ['suicide']  # This deals 15 damage
+            return self.submit_act(['suicide'])  # This deals 15 damage
 
         # Attack routine
         # If we are not suiciding, check if we should attack anyone.
@@ -140,14 +125,14 @@ class Robot:
             weakest_loc = weakest_enemy['location']
             dist_to_weakest = rg.dist(self.location, weakest_loc)
             if dist_to_weakest == 1:
-                return ['attack', weakest_loc]
+                return self.submit_act(['attack', weakest_loc])
             else:
                 # move towards enemy
-                return self.move_to(weakest_loc)
+                return self.submit_act(self.move_to(weakest_loc))
         else:
             # move towards formation
             dest = self.formation_locations[self.robot_id]
-            return self.move_to(dest)
+            return self.submit_act(self.move_to(dest))
 
     def formation_routine(self):
         # TODO
@@ -158,6 +143,10 @@ class Robot:
         pass
 
     def move_to(self, dest):
+        # TODO Only continue if the last move-to worked
+        #if len(self.last_act) == 2 and self.last_act[0] == 'move':
+        #    pass
+
         # Path-find to formation
         last_state = self.maze[dest[0]][dest[1]]
         self.maze[dest[0]][dest[1]] = 0
