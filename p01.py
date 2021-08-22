@@ -53,20 +53,18 @@ class Robot:
                 x = rg.wdist(loc, self.location)
         #print(rg.toward(self.location, t))
 
-        if 'obstacle' not in rg.loc_types(rg.toward(self.location, t)) \
-                and 'invalid' not in rg.loc_types(rg.toward(self.location, t)) \
-                and 'spawn' not in rg.loc_types(rg.toward(self.location, t)) and x < 19:
+        if any(x in ['obstacle', 'invalid', 'spawn'] for x in rg.loc_types(rg.toward(self.location, rg.CENTER_POINT)))\
+                and x < 19:
             print("move 1", game.robots[self.location])
             return ['move', (rg.toward(self.location, t))]
 
-        elif 'obstacle' not in rg.loc_types(rg.toward(self.location, rg.CENTER_POINT)) \
-                and 'invalid' not in rg.loc_types(rg.toward(self.location, rg.CENTER_POINT)) \
-                and 'spawn' not in rg.loc_types(rg.toward(self.location, rg.CENTER_POINT)):
+        elif any(x in ['obstacle', 'invalid', 'spawn'] for x in rg.loc_types(rg.toward(self.location, rg.CENTER_POINT))):
             print("move 2", game.robots[self.location])
             return ['move', rg.toward(self.location, rg.CENTER_POINT)]
 
         elif rg.locs_around(self.location, filter_out=('invalid', 'spawn', 'obstacle')):
             print("move 3", game.robots[self.location])
             return ['move', choices(rg.locs_around(self.location, filter_out=('invalid', 'spawn', 'obstacle')))[0]]
+
 
         return ['guard']
