@@ -1,9 +1,31 @@
 from rgkit import rg
 
+"""
+A bot which explores quadrant domination.
+Authors: Matt Sterckx, Spencer Imbleau
+"""
+
+"""
+TODO - Average the quadrant sizes during turns.
+
+Pseudo code below.
+
+avg = find_quadrant_avg();
+for quadrant in quadrants:
+    quadrant_total = find_quadrant_total(quadrant)
+    quadrant_difference = avg - quadrant_total # will be positive if there are less than avg
+    while (quadrant_difference > 1):
+        # this quadrant has not enough bots
+        bot_to_move = find_closest_ally(quadrant) # do not accept allies from this quadrant
+        move(bot_to_move, quadrant)
+        quadrant_difference -= 1
+"""
+
 
 class Robot:
     def __init__(self):
         self.turn = -1
+        # TODO self.formation_n_bots should be based on dynamic input
         self.formation_n_bots = {
                             0: {1: [(8, 8)],
                                 2: [(8, 7), (7, 8)],
@@ -33,15 +55,21 @@ class Robot:
                                 5: [(10, 14), (11, 13), (12, 12), (13, 11), (14, 10)],
                                 6: [(10, 15), (11, 14), (12, 13), (13, 12), (14, 11), (15, 10)],
                                 7: [(10, 16), (11, 15), (12, 14), (13, 13), (14, 12), (15, 11), (16, 10)]}}
-    """
-    This method needs to return one of:
 
-    ['move', (x, y)]
-    ['attack', (x, y)]
-    ['guard']
-    ['suicide']
-    """
     def act(self, game):
+        """
+        This method determines the action of a robot for Robot Game.
+
+        This method needs to return one of:
+        ['move', (x, y)]
+        ['attack', (x, y)]
+        ['guard']
+        ['suicide']
+        """
+        # TODO modularize this code into methods
+
+        # TODO put this in a "round_init()" method
+        # If the turn has updated, run init code for the round
         if game.turn != self.turn:
             self.turn = game.turn
             player_bots = []
@@ -85,14 +113,42 @@ class Robot:
         # TODO better guard logic
         if self.location == self.formation_locations[self.robot_id]:
             return ['guard']
-        move_to_take = rg.toward(self.location, self.formation_locations[self.robot_id])
-        if move_to_take in self.taken_moves:
+
+        # TODO better logic on *when* to path-find
+        # Path-find to formation
+        path = astar(self.maze, self.location, self.formation_locations[self.robot_id])
+        if path is None:
+            # No path found - Guard (or potentially suicide here?)
             return ['guard']
-        self.taken_moves.add(move_to_take)
-        return ['move', move_to_take]
+        else:
+            if len(path) > 1:
+                path.pop(0)
+            else:
+                return ['guard']
+            # Move towards formation
+            step_to_take = path[0]  # The step in the path found to formation
+            # Treat the step as an obstacle for future robots during pathfinding (avoid self-collisions)
+            self.maze[step_to_take[0]][step_to_take[1]] = 1  # 1 = Obstacle
+            # Submit move turn
+            return ['move', step_to_take]
+
+    def formation_routine(self):
+        # TODO
+        pass
+
+    def attack_routine(self):
+        # TODO
+        pass
+
+    def init_round(self):
+        # TODO
+        pass
 
 
 def find_nearest_quadrant(loc):
+    """
+    Find the nearest quadrant to a location tuple (x,y)
+    """
     if loc[0] < 9:
         if loc[1] < 9:
             return 0
