@@ -91,14 +91,15 @@ def get_weakest_bot(bots):
 
 
 def get_bots_next_to(location, game):
-    """Returns all bots next to a location."""
+    """Returns all bots next to a location.
+    old version called locs_around every single
+    time it looped, now it does once per call
+    """
 
     all_bots = game.get('robots')
-    bots = []
-    for loc in all_bots.keys():
-        if loc in rg.locs_around(location):
-            bots.append(all_bots[loc])
-    return bots
+    around = rg.locs_around(location)
+
+    return [all_bots[x] for x in all_bots.keys() if x in around]
 
 
 def get_bot_in_location(location, game):
