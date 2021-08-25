@@ -38,7 +38,7 @@ def cant_easily_leave_spawn(loc, game):
         for loc in adjacent_locs:
             if loc in all_bots:
                 adjacent_locs.remove(loc)
-        return (len(adjacent_locs) == 0)
+        return len(adjacent_locs) == 0
 
     # if the bot is not in spawn, then it can easily leave it
     # by standing still, hehe.
