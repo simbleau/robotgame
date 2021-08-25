@@ -22,10 +22,10 @@ main_axis_weight = 0.5
 hp_to_pin = {0: 6, 1: 11, 2: 51, 3: 51, 4: 51, 5: 51, 6: 51, 7: 51, 8: 51, 9: 51, 10: 51}
 
 canonical_spawn_locs = []
-for x in range(10):
-    for y in range(10):
-        if 'spawn' in rg.loc_types((x, y)):
-            canonical_spawn_locs.append((x, y))
+for spawn_x in range(10):
+    for spawn_y in range(10):
+        if 'spawn' in rg.loc_types((spawn_x, spawn_y)):
+            canonical_spawn_locs.append((spawn_x, spawn_y))
 # TTD:
 # - vary some priorities
 
@@ -33,14 +33,14 @@ one_robots = []
 two_robots = []
 
 
-def urgency(bot1, game):
+def urgency(bot1):
     return 100000 * rg.dist(bot1.location, rg.CENTER_POINT) + 100 * bot1.hp + bot1.location[0]
 
 
-def greater(bot1, bot2, game):
-    if urgency(bot1, game) > urgency(bot2, game):
+def greater(bot1, bot2):
+    if urgency(bot1) > urgency(bot2):
         return 1
-    if urgency(bot2, game) > urgency(bot1, game):
+    if urgency(bot2) > urgency(bot1):
         return 0
     # deliberately runs off the edge; this should be impossible.
 
@@ -66,7 +66,7 @@ def spawn(move):
 
 
 def surrounded_spawn(move):
-    for loc in rg.locs_around(move, filter_out=('obstacle', 'invalid', 'spawn')):
+    for _ in rg.locs_around(move, filter_out=('obstacle', 'invalid', 'spawn')):
         return 0
     return 1
 
@@ -82,7 +82,8 @@ def surrounders(this_robot, game, loc):
     for loc2 in rg.locs_around(loc):
         if loc2 in game.robots:
             bot2 = game.robots[loc2]
-            if bot2.player_id != this_robot.player_id: number_found += 1
+            if bot2.player_id != this_robot.player_id:
+                number_found += 1
     return number_found
 
 
@@ -178,8 +179,10 @@ def towardx(loc, dest):
 def move_towards_either_axis(loc, dest, turn):
     targetx = towardsx_if_not_spawn(loc, dest)
     targety = towardsy_if_not_spawn(loc, dest)
-    if targetx == 'no_move': return targety
-    if targety == 'no_move': return targetx
+    if targetx == 'no_move':
+        return targety
+    if targety == 'no_move':
+        return targetx
     if turn % 2 == 0:
         return targetx
     else:
@@ -226,7 +229,7 @@ def attack_moving_enemy(this_robot, game, illegals):
     return best_move
 
 
-def attack_if_possible(this_robot, game, illegals):
+def attack_if_possible(this_robot, illegals):
     if this_robot.location in illegals:
         return 'no_action'
     besthp = 1000
@@ -293,21 +296,21 @@ def safe(this_robot, loc, game):
 
 def scared(this_robot, game):
     num_surrounders = 0
-    scared = 0
+    is_scared = 0
     hp = 0
     for bot in one_robots:
         if bot.player_id != this_robot.player_id:
             num_surrounders += 1
             hp = bot.hp
-            last_found = bot
+            # last_found = bot
             if destruct_if_doomed_enemy(bot, game) != 'no_action':
-                scared = 1
+                is_scared = 1
     if num_surrounders > 1:
-        scared = 1
+        is_scared = 1
     if hp > this_robot.hp:
         if (surrounders(bot, game, bot.location) == 1) or this_robot.hp < 16:
-            scared = 1
-    return scared
+            is_scared = 1
+    return is_scared
 
 
 def run_if_scared_and_safe(this_robot, game, illegals):
@@ -423,7 +426,7 @@ def tentative_act(this_robot, game, illegals):
     possible_move = pin_to_spawn(this_robot, game, illegals)
     if possible_move != 'no_action':
         return possible_move
-    possible_move = attack_if_possible(this_robot, game, illegals)
+    possible_move = attack_if_possible(this_robot, illegals)
     if possible_move != 'no_action':
         return possible_move
     if spawn(this_robot.location):
@@ -507,11 +510,11 @@ def act_with_consideration(this_robot, game, illegals):
                         checky = locy + y
                         if (checkx, checky) in game.robots:
                             cand = game.robots[(checkx, checky)]
-                            if (cand.player_id == this_robot.player_id and greater(cand, bot, game) and (
-                                        not cand in bots_to_consider)):
+                            if (cand.player_id == this_robot.player_id and greater(cand, bot) and not (
+                                        cand in bots_to_consider)):
                                 new_bots.append(cand)
                                 bots_to_consider.append(cand)
-    sorted_bots = sorted(bots_to_consider, key=lambda bot: -urgency(bot, game))
+    sorted_bots = sorted(bots_to_consider, key=lambda b: -urgency(b))
     for bot in sorted_bots:
         move = act_with_illegals(bot, game, illegals)
         square = destination_square(bot, move)
