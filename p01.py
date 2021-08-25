@@ -1,413 +1,525 @@
+# Dulladob 0.1 by Camelot Chess
+# http://robotgame.net/viewrobot/7641
+
 from rgkit import rg
 
-"""
-A bot which explores quadrant domination.
-Authors: Matt Sterckx, Spencer Imbleau
-"""
+spawn_param = 8  # which turn to we begin bouncing?
+
+suicide_param = 6  # when to blow ourselves up (param*surrounders>hp)?
+suicide_fear_param = 6  # which to fear enemies blowing up?
+
+staying_still_bonus = 0.34  # points for staying put
+best_center_distance_param = 6  # ideal distance from the center
+best_center_distance_weight = 1.01  # points lost for every square off
+spawn_weight = 0.34  # points lost being spawn; multiplied by turns since death
+adjacent_robot_penalty = 1  # NO NEED TO CHAGE - points lost for adjacent robots
+adjacent_friendly_penalty = 0.51  # NO NEED TO CHAGE - points lost for adjacent robots
+main_axis_weight = 0.5
+
+# parameters controlling how much hp we need to pin an enemy to spawn. Arguably
+# should depend on their hp, and/or happen before running, particularly on first
+# turn.
+hp_to_pin = {0: 6, 1: 11, 2: 51, 3: 51, 4: 51, 5: 51, 6: 51, 7: 51, 8: 51, 9: 51, 10: 51}
+
+canonical_spawn_locs = []
+for x in range(10):
+    for y in range(10):
+        if 'spawn' in rg.loc_types((x, y)):
+            canonical_spawn_locs.append((x, y))
+# TTD:
+# - vary some priorities
+
+one_robots = []
+two_robots = []
+
+
+def urgency(bot1, game):
+    return 100000 * rg.dist(bot1.location, rg.CENTER_POINT) + 100 * bot1.hp + bot1.location[0]
+
+
+def greater(bot1, bot2, game):
+    if urgency(bot1, game) > urgency(bot2, game):
+        return 1
+    if urgency(bot2, game) > urgency(bot1, game):
+        return 0
+    # deliberately runs off the edge; this should be impossible.
+
+
+def valid(move):
+    types = rg.loc_types(move)
+    if 'invalid' in types:
+        return 0
+    if 'obstacle' in types:
+        return 0
+    return 1
+
+
+def not_spawn(move):
+    types = rg.loc_types(move)
+    if 'spawn' in types:
+        return 0
+    return 1
+
+
+def spawn(move):
+    return 1 - not_spawn(move)
+
+
+def surrounded_spawn(move):
+    for loc in rg.locs_around(move, filter_out=('obstacle', 'invalid', 'spawn')):
+        return 0
+    return 1
+
+
+def equal(bot1, bot2):
+    if bot1.location == bot2.location:
+        return 1
+    return 0
+
+
+def surrounders(this_robot, game, loc):
+    number_found = 0
+    for loc2 in rg.locs_around(loc):
+        if loc2 in game.robots:
+            bot2 = game.robots[loc2]
+            if bot2.player_id != this_robot.player_id: number_found += 1
+    return number_found
+
+
+def distance_from_spawn(square):
+    # canonise the square
+    canonical_x = square[0]
+    canonical_y = square[1]
+    if canonical_x > 9:
+        canonical_x = 18 - canonical_x
+    if canonical_y > 9:
+        canonical_y = 18 - canonical_y
+    if canonical_x > canonical_y:
+        canonical_square = (canonical_y, canonical_x)
+    else:
+        canonical_square = (canonical_x, canonical_y)
+    distance = 10
+    for loc in canonical_spawn_locs:
+        if rg.wdist(loc, canonical_square) < distance:
+            distance = rg.wdist(loc, canonical_square)
+    return distance
+
+
+def move_towards_if_no_ally(loc, dest, game, illegals):
+    xmove = towardsx_if_not_spawn(loc, dest)
+    ymove = towardsy_if_not_spawn(loc, dest)
+    if xmove != 'no_move' and not (xmove in illegals) and not (xmove in game.robots):
+        xvalid = 1
+    else:
+        xvalid = 0
+    if ymove != 'no_move' and not (ymove in illegals) and not (ymove in game.robots):
+        yvalid = 1
+    else:
+        yvalid = 0
+    if xvalid == 1:
+        return xmove
+    if yvalid == 1:
+        return ymove
+    return 'no_action'
+
+
+def towardsy_if_not_spawn(loc, dest):
+    if dest[1] > loc[1]:
+        tentative_move = (loc[0], loc[1] + 1)
+        if valid(tentative_move):
+            if not_spawn(tentative_move) or spawn(loc):
+                return tentative_move
+    if dest[1] < loc[1]:
+        tentative_move = (loc[0], loc[1] - 1)
+        if valid(tentative_move):
+            if not_spawn(tentative_move) or spawn(loc):
+                return tentative_move
+    return 'no_move'
+
+
+def towardsx_if_not_spawn(loc, dest):
+    if dest[0] > loc[0]:
+        tentative_move = (loc[0] + 1, loc[1])
+        if valid(tentative_move):
+            if not_spawn(tentative_move) or not not_spawn(loc):
+                return tentative_move
+    if dest[0] < loc[0]:
+        tentative_move = (loc[0] - 1, loc[1])
+        if valid(tentative_move):
+            if not_spawn(tentative_move) or not not_spawn(loc):
+                return tentative_move
+    return 'no_move'
+
+
+def towardy(loc, dest):
+    if dest[1] > loc[1]:
+        tentative_move = (loc[0], loc[1] + 1)
+        if valid(tentative_move):
+            return tentative_move
+    if dest[1] < loc[1]:
+        tentative_move = (loc[0], loc[1] - 1)
+        if valid(tentative_move):
+            return tentative_move
+    return 'no_move'
+
+
+def towardx(loc, dest):
+    if dest[0] > loc[0]:
+        tentative_move = (loc[0] + 1, loc[1])
+        if valid(tentative_move):
+            return tentative_move
+    if dest[0] < loc[0]:
+        tentative_move = (loc[0] - 1, loc[1])
+        if valid(tentative_move):
+            return tentative_move
+    return 'no_move'
+
+
+def move_towards_either_axis(loc, dest, turn):
+    targetx = towardsx_if_not_spawn(loc, dest)
+    targety = towardsy_if_not_spawn(loc, dest)
+    if targetx == 'no_move': return targety
+    if targety == 'no_move': return targetx
+    if turn % 2 == 0:
+        return targetx
+    else:
+        return targety
+
+
+def destruct_if_doomed_us(this_robot, game, illegals):
+    if this_robot.location in illegals:
+        return 'no_action'
+    if surrounders(this_robot, game, this_robot.location) * suicide_param > this_robot.hp:
+        return ['suicide']
+    return 'no_action'
+
+
+def destruct_if_doomed_enemy(this_robot, game):
+    if surrounders(this_robot, game, this_robot.location) * suicide_fear_param > this_robot.hp:
+        return ['suicide']
+    return 'no_action'
+
+
+def attack_moving_enemy(this_robot, game, illegals):
+    if this_robot.location in illegals:
+        return 'no_action'
+    square_dictionary = {}
+    for square in rg.locs_around(this_robot.location):
+        square_dictionary[square] = 0
+        if square in game.robots:
+            square_dictionary[square] -= 40  # don't fire if our robot is there, they probably won't move there
+    for bot in two_robots:
+        if bot.player_id != this_robot.player_id:
+            loc = bot.location
+            targetx = towardx(this_robot.location, loc)
+            targety = towardy(this_robot.location, loc)
+            if targetx != 'no_move':
+                square_dictionary[targetx] += 70 - bot.hp - rg.dist(rg.CENTER_POINT, targetx)
+            if targety != 'no_move':
+                square_dictionary[targety] += 70 - bot.hp - rg.dist(rg.CENTER_POINT, targety)
+    best_score = 0
+    best_move = 'no_action'
+    for square in rg.locs_around(this_robot.location):
+        if square_dictionary[square] > best_score:
+            best_score = square_dictionary[square]
+            best_move = ['attack', square]
+    return best_move
+
+
+def attack_if_possible(this_robot, game, illegals):
+    if this_robot.location in illegals:
+        return 'no_action'
+    besthp = 1000
+    bestloc = 'none'
+    for bot in one_robots:
+        if bot.player_id != this_robot.player_id:
+            if bot.hp < besthp:
+                besthp = bot.hp
+                bestloc = bot.location
+    if besthp < 1000:
+        return ['attack', bestloc]
+    return 'no_action'
+
+
+def strong_hunt_the_weak(this_robot, game, illegals):
+    if this_robot.hp < 30:
+        return 'no_action'
+    weakest_enemy = 20
+    best_move = 'no_action'
+    for bot in one_robots:
+        if bot.player_id != this_robot.player_id:
+            if bot.hp < weakest_enemy:
+                weakest_enemy = bot.hp
+                if bot.hp <= 5 and not (bot.location in illegals) and (
+                            not surrounders(this_robot, game, bot.location) > 1):
+                    best_move = ['move', bot.location]
+                    weakest_enemy = bot.hp
+                elif this_robot.location not in illegals:
+                    best_move = ['attack', bot.location]
+                    weakest_enemy = bot.hp
+    for bot in two_robots:
+        if bot.player_id != this_robot.player_id:
+            if bot.hp < weakest_enemy:
+                targetx = towardsx_if_not_spawn(this_robot.location, bot.location)
+                targety = towardsy_if_not_spawn(this_robot.location, bot.location)
+                if not (targetx == 'no_move'):
+                    if not (targetx in illegals or surrounders(this_robot, game, targetx) > 1):
+                        best_move = ['move', targetx]
+                        weakest_enemy = bot.hp
+                if not (targety == 'no_move'):
+                    if not (targety in illegals or surrounders(this_robot, game, targety) > 1):
+                        if targetx == 'no_move' or rg.dist(targetx, rg.CENTER_POINT) > rg.dist(targety,
+                                                                                               rg.CENTER_POINT):
+                            best_move = ['move', targety]
+                            weakest_enemy = bot.hp
+    return best_move
+
+
+def safe(this_robot, loc, game):
+    turns_left = 10 - game.turn % 10
+    if turns_left == 10:
+        turns_left = 0
+    if turns_left <= 2 and spawn(loc):
+        return 0
+    for bot in one_robots:
+        if loc == bot.location and bot.player_id != this_robot.player_id:
+            return 0
+    for bot in two_robots:
+        if bot.player_id != this_robot.player_id:
+            if rg.wdist(loc, bot.location) == 1:
+                return 0
+    return 1
+
+
+def scared(this_robot, game):
+    num_surrounders = 0
+    scared = 0
+    hp = 0
+    for bot in one_robots:
+        if bot.player_id != this_robot.player_id:
+            num_surrounders += 1
+            hp = bot.hp
+            last_found = bot
+            if destruct_if_doomed_enemy(bot, game) != 'no_action':
+                scared = 1
+    if num_surrounders > 1:
+        scared = 1
+    if hp > this_robot.hp:
+        if (surrounders(bot, game, bot.location) == 1) or this_robot.hp < 16:
+            scared = 1
+    return scared
+
+
+def run_if_scared_and_safe(this_robot, game, illegals):
+    if not scared(this_robot, game):
+        return 'no_action'
+    best_distance = 1000
+    move = 'no_action'
+    for loc in rg.locs_around(this_robot.location, filter_out=('obstacle', 'invalid', 'spawn')):
+        if not (loc in illegals) and safe(this_robot, loc, game) == 1:
+            if rg.dist(loc, rg.CENTER_POINT) < best_distance:
+                best_distance = rg.dist(loc, rg.CENTER_POINT)
+                move = ['move', loc]
+    return move
+
+
+def empty_score(this_robot, loc, game):
+    score = 0
+    if this_robot.hp > 25:
+        score -= abs(rg.dist(loc, rg.CENTER_POINT) - best_center_distance_param) * best_center_distance_weight
+    else:
+        score -= rg.dist(loc, rg.CENTER_POINT) * best_center_distance_weight
+    for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
+        if loc2 in game.robots:
+            if game.robots[loc2].player_id != this_robot.player_id:
+                score -= adjacent_robot_penalty
+            else:
+                score -= adjacent_friendly_penalty
+    # if we are trying to run away from spawn, non-spawn adjacent squares with no enemies by them are good, because we need to move
+    if spawn(loc) & game.turn < 91:
+        for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
+            clear_square = 1
+            for loc3 in rg.locs_around(loc2, filter_out=('obstacle', 'invalid', 'spawn')):
+                if loc3 in game.robots and game.robots[loc3].player_id != this_robot.player_id:
+                    clear_square = 0
+            score += ((game.turn + 1) % 10) * spawn_weight * clear_square / 2
+    if spawn(loc) & game.turn < 91:
+        score -= ((game.turn + 1) % 10) * spawn_weight
+    if surrounded_spawn(loc) & game.turn < 91:
+        score -= (game.turn % 10) * spawn_weight
+    return score
+
+
+def find_empty_space(this_robot, game, illegals):
+    loc = this_robot.location
+    best_score = empty_score(this_robot, loc, game) + staying_still_bonus
+    move = ['guard']
+    if loc in illegals:
+        best_score = -10000
+    for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
+        score = empty_score(this_robot, loc2, game)
+        if loc2 in illegals:
+            score -= 10000
+        if score > best_score:
+            best_score = score
+            move = ['move', loc2]
+    return move
+
+
+def pin_to_spawn(this_robot, game, illegals):
+    if game.turn > 95:
+        return 'no_action'
+    turns_left = 10 - game.turn % 10
+    if turns_left == 10:
+        turns_left = 0
+    if this_robot.hp < hp_to_pin[turns_left]:
+        return 'no_action'
+    loc = this_robot.location
+    for bot in one_robots:
+        if bot.player_id != this_robot.player_id:
+            loc2 = bot.location
+            if spawn(loc2):
+                if not_spawn(loc) and not (loc in illegals):
+                    return ['guard']
+    for bot in two_robots:
+        if bot.player_id != this_robot.player_id:
+            loc2 = bot.location
+            if spawn(loc2):
+                block_square = move_towards_either_axis(loc, loc2, game.turn)
+                if block_square == 'no_move':
+                    return 'no_action'
+                if not_spawn(block_square) and not (block_square in illegals):
+                    return ['move', block_square]
+    return 'no_action'
+
+
+def tentative_act(this_robot, game, illegals):
+    global one_robots
+    global two_robots
+    one_robots = []
+    two_robots = []
+    locx = this_robot.location[0]
+    locy = this_robot.location[1]
+    for x in range(-2, 3):
+        for y in range(-2, 3):
+            if abs(x) + abs(y) in range(1, 3):
+                checkx = locx + x
+                checky = locy + y
+                if (checkx, checky) in game.robots:
+                    bot = game.robots[(checkx, checky)]
+                    if abs(x) + abs(y) == 1:
+                        one_robots.append(bot)
+                    else:
+                        two_robots.append(bot)
+    possible_move = strong_hunt_the_weak(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    possible_move = run_if_scared_and_safe(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    possible_move = destruct_if_doomed_us(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    possible_move = pin_to_spawn(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    possible_move = attack_if_possible(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    if spawn(this_robot.location):
+        possible_move = find_empty_space(this_robot, game, illegals)
+        if possible_move[0] != 'guard':
+            return possible_move
+    possible_move = attack_moving_enemy(this_robot, game, illegals)
+    if possible_move != 'no_action':
+        return possible_move
+    actual_move = find_empty_space(this_robot, game, illegals)
+    return actual_move
+
+
+def empty_score_punish_spawn(this_robot, loc, game):
+    score = empty_score(this_robot, loc, game)
+    if spawn(loc):
+        score -= 100
+    if surrounded_spawn(loc):
+        score -= 100
+    return score
+
+
+def find_empty_space_punish_spawn(this_robot, game, illegals):
+    loc = this_robot.location
+    best_score = empty_score_punish_spawn(this_robot, loc, game) + staying_still_bonus
+    move = ['guard']
+    if loc in illegals:
+        best_score = -10000
+    for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
+        score = empty_score_punish_spawn(this_robot, loc2, game)
+        if loc2 in illegals:
+            score = -10000
+        if score > best_score:
+            best_score = score
+            move = ['move', loc2]
+    return move
+
+
+def run_from_spawn(this_robot, game, illegals):
+    return find_empty_space_punish_spawn(this_robot, game, illegals)
+
+
+def at_spawn_after_move(this_robot, move):
+    if move[0] != 'move':
+        return spawn(this_robot.location)
+    else:
+        return spawn(move[1])
+
+
+def act_with_illegals(this_robot, game, illegals):
+    tentative_move = tentative_act(this_robot, game, illegals)
+    if 9 > game.turn % 10 > 0:
+        return tentative_move
+    if game.turn > 95:
+        return tentative_move
+    if not at_spawn_after_move(this_robot, tentative_move):
+        return tentative_move
+    return run_from_spawn(this_robot, game, illegals)
+
+
+def destination_square(bot, move):
+    if move[0] == 'move':
+        return move[1]
+    else:
+        return bot.location
+
+
+def act_with_consideration(this_robot, game, illegals):
+    bots_to_consider = [this_robot]
+    new_bots = [this_robot]
+    while len(new_bots):
+        last_bots = new_bots
+        new_bots = []
+        for bot in last_bots:
+            locx = bot.location[0]
+            locy = bot.location[1]
+            for x in range(-2, 3):
+                for y in range(-2, 3):
+                    if abs(x) + abs(y) in range(1, 3):
+                        checkx = locx + x
+                        checky = locy + y
+                        if (checkx, checky) in game.robots:
+                            cand = game.robots[(checkx, checky)]
+                            if (cand.player_id == this_robot.player_id and greater(cand, bot, game) and (
+                                        not cand in bots_to_consider)):
+                                new_bots.append(cand)
+                                bots_to_consider.append(cand)
+    sorted_bots = sorted(bots_to_consider, key=lambda bot: -urgency(bot, game))
+    for bot in sorted_bots:
+        move = act_with_illegals(bot, game, illegals)
+        square = destination_square(bot, move)
+        illegals.add(square)
+        if bot == this_robot:
+            return move
 
 
 class Robot:
-    def __init__(self):
-        self.turn = -1
-        self.last_act = None
-        # TODO self.formation_n_bots should be based on dynamic input
-        self.formation_n_bots = {
-                            0: {1: [(8, 8)],
-                                2: [(8, 7), (7, 8)],
-                                3: [(8, 6), (7, 7), (6, 8)],
-                                4: [(8, 5), (7, 6), (6, 7), (5, 8)],
-                                5: [(8, 4), (7, 5), (6, 6), (5, 7), (4, 8)],
-                                6: [(8, 3), (7, 4), (6, 5), (5, 6), (4, 7), (3, 8)],
-                                7: [(8, 2), (7, 3), (6, 4), (5, 5), (4, 6), (3, 7), (2, 8)]},
-                            1: {1: [(10, 8)],
-                                2: [(10, 7), (11, 8)],
-                                3: [(10, 6), (11, 7), (12, 8)],
-                                4: [(10, 5), (11, 6), (12, 7), (13, 8)],
-                                5: [(10, 4), (11, 5), (12, 6), (13, 7), (14, 8)],
-                                6: [(10, 3), (11, 4), (12, 5), (13, 6), (14, 7), (15, 8)],
-                                7: [(10, 2), (11, 3), (12, 4), (13, 5), (14, 6), (15, 7), (16, 8)]},
-                            2: {1: [(8, 10)],
-                                2: [(7, 10), (8, 11)],
-                                3: [(6, 10), (7, 11), (8, 12)],
-                                4: [(5, 10), (6, 11), (7, 12), (8, 13)],
-                                5: [(4, 10), (5, 11), (6, 12), (7, 13), (8, 14)],
-                                6: [(3, 10), (4, 11), (5, 12), (6, 13), (7, 14), (8, 15)],
-                                7: [(2, 10), (3, 11), (4, 12), (5, 13), (6, 14), (7, 15), (8, 16)]},
-                            3: {1: [(10, 10)],
-                                2: [(10, 11), (11, 10)],
-                                3: [(10, 12), (11, 11), (12, 10)],
-                                4: [(10, 13), (11, 12), (12, 11), (13, 10)],
-                                5: [(10, 14), (11, 13), (12, 12), (13, 11), (14, 10)],
-                                6: [(10, 15), (11, 14), (12, 13), (13, 12), (14, 11), (15, 10)],
-                                7: [(10, 16), (11, 15), (12, 14), (13, 13), (14, 12), (15, 11), (16, 10)]}}
-        self.checkerboard = []
-        x = 0
-        y = -1
-        direction = 'up'
-        limit = 1
-        while -9 < x < 9 and -9 < y < 9:
-            self.checkerboard.append((x + 9, y + 9))
-            if direction == 'up':
-                if x + 2 > limit:
-                    direction = 'right'
-                    x += 1
-                    y += 1
-                else:
-                    x += 2
-            elif direction == 'right':
-                if y + 2 > limit:
-                    direction = 'down'
-                    x -= 1
-                    y += 1
-                else:
-                    y += 2
-            elif direction == 'down':
-                if abs(x - 2) > limit:
-                    direction = 'left'
-                    x -= 1
-                    y -= 1
-                else:
-                    x -= 2
-            else:
-                if abs(y - 2) > limit:
-                    direction = 'up'
-                    limit += 1
-                    y -= 2
-                else:
-                    y -= 2
-        print(self.checkerboard)
-
-    def submit_act(self, act):
-        self.last_act = act
-        return act
-
     def act(self, game):
-        """
-        This method determines the action of a robot for Robot Game.
-
-        This method needs to return one of:
-        ['move', (x, y)]
-        ['attack', (x, y)]
-        ['guard']
-        ['suicide']
-        """
-        # TODO modularize this code into methods
-
-        # If the turn has updated, run init code for the round
-        if game.turn != self.turn:
-            self.init_round(game)
-
-        # Scan for enemies with a view length
-        view_length = 2  # The amount of tiles away our robots will search for enemies
-        seen_enemies = []
-        for robot in game.robots:
-            # Do not consider friendly robots
-            if game.robots[robot]['player_id'] == self.player_id:
-                continue
-            # Attack bots that are close enough
-            robot_loc = game.robots[robot]['location']
-            dist = rg.dist(self.location, robot_loc)
-            if dist <= view_length:
-                seen_enemies.append(game.robots[robot])
-
-        # Suicide routine
-        # Reduce seen enemies to only those which can attack us
-        potential_attackers = self.reduce_to_adjacent(seen_enemies)
-        potential_damage_intake = len(potential_attackers) * 9  # Robots do 8-10 damage per turn. Avg is 9.
-        # Suicide if we can die to the attackers around us
-        if (self.hp - potential_damage_intake) <= 0:
-            return self.submit_act(['suicide'])  # This deals 15 damage
-
-        # Attack routine
-        # If we are not suiciding, check if we should attack anyone.
-        weakest_enemy = self.reduce_to_weakest(seen_enemies)
-        if weakest_enemy is not None:
-            weakest_loc = weakest_enemy['location']
-            dist_to_weakest = rg.dist(self.location, weakest_loc)
-            if dist_to_weakest == 1:
-                return self.submit_act(['attack', weakest_loc])
-            else:
-                # move towards enemy
-                return self.submit_act(self.move_to(weakest_loc))
-        else:
-            # move towards formation
-            dest = self.formation_locations[self.robot_id]
-            return self.submit_act(self.move_to(dest))
-
-    def formation_routine(self):
-        # TODO
-        pass
-
-    def attack_routine(self):
-        # TODO
-        pass
-
-    def move_to(self, dest):
-        # TODO Only continue if the last move-to worked
-        #if len(self.last_act) == 2 and self.last_act[0] == 'move':
-        #    pass
-
-        # Path-find to formation
-        last_state = self.maze[dest[0]][dest[1]]
-        self.maze[dest[0]][dest[1]] = 0
-        path = astar(self.maze, self.location, dest)
-        self.maze[dest[0]][dest[1]] = last_state
-        if path is None:
-            # No path found - Guard (or potentially suicide here?)
-            return ['guard']
-        else:
-            if len(path) > 1:
-                path.pop(0)
-            else:
-                return ['guard']
-            # Move towards formation
-            step_to_take = path[0]  # The step in the path found to formation
-            # Treat the step as an obstacle for future robots during pathfinding (avoid self-collisions)
-            self.maze[step_to_take[0]][step_to_take[1]] = 1  # 1 = Obstacle
-            # Submit move turn
-            return ['move', step_to_take]
-
-    def reduce_to_adjacent(self, robots):
-        """
-        Given an array of robots, return the robots immediately adjacent to self.
-        """
-        adjacent = []
-        for robot in robots:
-            dist = rg.dist(self.location, robot['location'])
-            if dist <= 1:
-                adjacent.append(robot)
-        return adjacent
-
-    def reduce_to_weakest(self, robots):
-        """
-        Given an array of robots, prioritizing health, then distance in the list.
-        """
-        weakest = None
-        for robot in robots:
-            if weakest is None:
-                weakest = robot
-                continue
-            if robot['hp'] < weakest['hp']:
-                weakest = robot
-            elif robot['hp'] == weakest['hp']:
-                dist_to_robot = rg.dist(self.location, robot['location'])
-                dist_to_weakest = rg.dist(self.location, weakest['location'])
-                if dist_to_robot < dist_to_weakest:
-                    weakest = robot
-        return weakest
-
-    def init_round(self, game):
-        # TODO assign formation locations to bots based on closest distance instead of randomly
-        self.turn = game.turn
-        player_bots = []
-        for robot in game.robots:
-            if 'robot_id' in game.robots[robot].keys():
-                player_bots.append(game.robots[robot])
-        # bots_per_quadrant = len(player_bots) / 4
-        # q_bots = {0: [], 1: [], 2: [], 3: []}
-        # for bot in player_bots:
-        #     q_bots[find_nearest_quadrant(bot['location'])].append(bot)
-        # for q in q_bots:
-        #     while abs(bots_per_quadrant - len(q_bots[q])) > 1:
-        #         if bots_per_quadrant > len(q_bots[q]):
-        #             q_bots = move_from_closest_quadrant(q, q_bots, bots_per_quadrant,
-        #                                                 self.formation_n_bots[q][min(7, int(bots_per_quadrant))])
-        #         else:
-        #             q_bots = move_to_closest_quadrant(q, q_bots, bots_per_quadrant)
-        #
-        self.maze = game_to_maze(game)
-        self.formation_locations = {}
-        # for q in q_bots:
-        #     if len(q_bots[q]) > 0:
-        #         locations = self.formation_n_bots[q][min(len(q_bots[q]), 7)]
-        #         for b in range(len(q_bots[q])):
-        #             if b < 7:
-        #                 self.formation_locations[q_bots[q][b]['robot_id']] = locations[b]
-        #             else:
-        #                 self.formation_locations[q_bots[q][b]['robot_id']] = None
-        for bot in range(len(player_bots)):
-            self.formation_locations[player_bots[bot]['robot_id']] = self.checkerboard[bot]
-
-
-def find_nearest_quadrant(loc):
-    """
-    Find the nearest quadrant to a location tuple (x,y)
-    """
-    if loc[0] < 9:
-        if loc[1] < 9:
-            return 0
-        else:
-            return 2
-    else:
-        if loc[1] < 9:
-            return 1
-        else:
-            return 3
-
-
-def move_from_closest_quadrant(q_move_to, quadrants, bots_per_quadrant, formation):
-    """
-    TODO Document
-    """
-    closest_bot = None
-    closest_bot_distance = -1
-    closest_bot_index = 0
-    closest_bot_quadrant = 0
-    for q in quadrants:
-        if q != q_move_to and len(quadrants[q]) > bots_per_quadrant:
-            for bot in range(len(quadrants[q])):
-                for loc in formation:
-                    if closest_bot is None or rg.dist(quadrants[q][bot]['location'], loc) < closest_bot_distance:
-                        closest_bot = quadrants[q][bot]
-                        closest_bot_distance = rg.dist(quadrants[q][bot]['location'], loc)
-                        closest_bot_quadrant = q
-                        closest_bot_index = bot
-    quadrants[q_move_to].append(closest_bot)
-    quadrants[closest_bot_quadrant].pop(closest_bot_index)
-    return quadrants
-
-
-def move_to_closest_quadrant(q_move_from, quadrants, bots_per_quadrant):
-    # TODO improve logic to choose quadrant to move to
-    for q in quadrants:
-        if len(quadrants[q]) < bots_per_quadrant:
-            quadrants[q].append(quadrants[q_move_from][0])
-            quadrants[q_move_from].pop(0)
-            return quadrants
-
-
-def game_to_maze(game):
-    """
-    Convert the game to a maze digestible for the A* pathfinding algorithm
-    """
-    #        0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5  6  7  8
-    maze = [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # 0
-            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],  # 1
-            [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1],  # 2
-            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],  # 3
-            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],  # 4
-            [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],  # 5
-            [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],  # 6
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 7
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 8
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 9
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 10
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 11
-            [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],  # 12
-            [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],  # 13
-            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],  # 14
-            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],  # 15
-            [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1],  # 16
-            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],  # 17
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]  # 18
-    # Add robots to maze
-    for robot in game.robots:
-        loc = game.robots[robot]['location']
-        x = loc[0]
-        y = loc[1]
-        maze[x][y] = 1
-    # Return maze
-    return maze
-
-# A-STAR ALGORITHM STUFF BELOW
-
-
-class Node:
-    """
-    A node class for A* Pathfinding
-    """
-    def __init__(self, parent=None, position=None):
-        self.parent = parent
-        self.position = position
-        self.g = 0
-        self.h = 0
-        self.f = 0
-
-    def __eq__(self, other):
-        return self.position == other.position
-
-
-def astar(maze, start, end):
-    """
-    Returns a list of tuples as a path from the given start to the given end in the given maze
-    """
-    # Create start and end node
-    start_node = Node(None, start)
-    start_node.g = start_node.h = start_node.f = 0
-    end_node = Node(None, end)
-    end_node.g = end_node.h = end_node.f = 0
-
-    # Initialize both open and closed list
-    open_list = []
-    closed_list = []
-
-    # Add the start node
-    open_list.append(start_node)
-
-    # Loop until you find the end
-    recursion = 0
-    while len(open_list) > 0 and recursion < 50:
-        recursion += 1
-
-        # Get the current node
-        current_node = open_list[0]
-        current_index = 0
-        for index, item in enumerate(open_list):
-            if item.f < current_node.f:
-                current_node = item
-                current_index = index
-
-        # Pop current off open list, add to closed list
-        open_list.pop(current_index)
-        closed_list.append(current_node)
-
-        # Found the goal
-        if current_node == end_node:
-            path = []
-            current = current_node
-            while current is not None:
-                path.append(current.position)
-                current = current.parent
-            return path[::-1]  # Return reversed path
-
-        # Generate children
-        children = []
-        for new_position in [(0, -1), (0, 1), (-1, 0), (1, 0)]:  # Only check adjacent squares
-
-            # Get node position
-            node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1])
-
-            # Make sure within range
-            if node_position[0] > (len(maze) - 1) or node_position[0] < 0 or node_position[1] > (len(maze[len(maze)-1]) -1) or node_position[1] < 0:
-                continue
-
-            # Make sure walkable terrain
-            if maze[node_position[0]][node_position[1]] != 0:
-                continue
-
-            # Create new node
-            new_node = Node(current_node, node_position)
-
-            # Append
-            children.append(new_node)
-        # Loop through children
-        for child in children:
-            # Child is on the closed list
-            for closed_child in closed_list:
-                if child == closed_child:
-                    continue
-
-            # Create the f, g, and h values
-            child.g = current_node.g + 1
-            child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
-            child.f = child.g + child.h
-
-            # Child is already in the open list
-            for open_node in open_list:
-                if child == open_node and child.g > open_node.g:
-                    continue
-
-            # Add the child to the open list
-            open_list.append(child)
-    else:
-        return None
+        return act_with_consideration(self, game, set())
