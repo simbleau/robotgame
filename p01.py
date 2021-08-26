@@ -2,6 +2,7 @@
 # http://robotgame.net/viewrobot/7641
 
 from rgkit import rg
+import math
 
 spawn_param = 8  # which turn to we begin bouncing?
 
@@ -12,8 +13,8 @@ staying_still_bonus = 0.34  # points for staying put
 best_center_distance_param = 6  # ideal distance from the center
 best_center_distance_weight = 1.01  # points lost for every square off
 spawn_weight = 0.34  # points lost being spawn; multiplied by turns since death
-adjacent_robot_penalty = 1  # NO NEED TO CHAGE - points lost for adjacent robots
-adjacent_friendly_penalty = 0.51  # NO NEED TO CHAGE - points lost for adjacent robots
+adjacent_robot_penalty = 1  # NO NEED TO CHANGE - points lost for adjacent robots
+adjacent_friendly_penalty = 0.51  # NO NEED TO CHANGE - points lost for adjacent robots
 main_axis_weight = 0.5
 
 # parameters controlling how much hp we need to pin an enemy to spawn. Arguably
@@ -257,6 +258,11 @@ def safe(this_robot, loc, game):
 
 
 def scared(this_robot, game):
+    #################################################################
+    # Added by Spencer, Matt - Never stay in spawn for the first turn
+    if game.turn % 10 == 1 and 'spawn' in rg.loc_types(this_robot.location):
+        return 1
+    #################################################################
     num_surrounders = 0
     for bot in one_robots:
         if bot.player_id != this_robot.player_id:
@@ -325,12 +331,21 @@ def find_empty_space(this_robot, game, illegals):
 
 def pin_to_spawn(this_robot, game, illegals):
     turns_left = (10 - game.turn) % 10
-    if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
+    # if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
+    if game.turn > 95 or turns_left > 2:
         return 'no_action'
     loc = this_robot.location
     for bot in one_robots:
         if bot.player_id != this_robot.player_id and (spawn(bot.location) and not_spawn(loc) and not (loc in illegals)):
-            return ['guard']
+            if turns_left == 1:
+                # find free location to move away from spawn to
+                return find_empty_space_punish_spawn(this_robot, game, illegals)
+            sacrifice_to_guard = turns_left * 5
+            sacrifice_to_kill = math.ceil(bot.hp / 9)
+            if sacrifice_to_kill >= sacrifice_to_guard:
+                return ['guard']
+            else:
+                return ['attack', bot.location]
     for bot in two_robots:
         if bot.player_id != this_robot.player_id and spawn(bot.location):
             block_square = move_towards_either_axis(loc, bot.location, game.turn)
