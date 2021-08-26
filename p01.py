@@ -1,4 +1,5 @@
 # Dulladob 0.1 by Camelot Chess
+# Modified and improved by Spencer Imbleau and Matthias Sterckx
 # http://robotgame.net/viewrobot/7641
 
 from rgkit import rg
@@ -332,6 +333,7 @@ def find_empty_space(this_robot, game, illegals):
 def pin_to_spawn(this_robot, game, illegals):
     turns_left = (10 - game.turn) % 10
     # if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
+
     if game.turn > 95 or turns_left > 2:
         return 'no_action'
     loc = this_robot.location
