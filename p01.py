@@ -26,6 +26,13 @@ hp_to_pin = {0: 6, 1: 11, 2: 51, 3: 51, 4: 51, 5: 51, 6: 51, 7: 51, 8: 51, 9: 51
 quadrant_centers = {0: (5, 5), 1: (13, 5), 2: (5, 13), 3: (13, 13)}
 worst_ratio_quadrant = 0
 
+# Strong hunt the weak variable
+weakest_enemy_hp = 30
+strong_hunt_the_weak_hp_limit = 30
+
+#Empty Space
+empty_score_hp = 25
+
 canonical_spawn_locs = []
 for spawn_x in range(10):
     for spawn_y in range(10):
@@ -223,10 +230,10 @@ def attack_if_possible(this_robot, illegals):
 
 
 def strong_hunt_the_weak(this_robot, game, illegals):
-    if this_robot.hp < 30:
+    if this_robot.hp < strong_hunt_the_weak_hp_limit:
         return 'no_action'
-    weakest_enemy = 30
     best_move = 'no_action'
+    weakest_enemy = weakest_enemy_hp
     for bot in one_robots:
         if bot.player_id != this_robot.player_id:
             if bot.hp < weakest_enemy:
@@ -310,7 +317,7 @@ def run_if_scared_and_safe(this_robot, game, illegals):
 
 def empty_score(this_robot, loc, game):
     score = 0
-    if this_robot.hp > 25:
+    if this_robot.hp > empty_score_hp:
         score -= abs(rg.dist(loc, rg.CENTER_POINT) - best_center_distance_param) * best_center_distance_weight
     else:
         score -= rg.dist(loc, rg.CENTER_POINT) * best_center_distance_weight
