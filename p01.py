@@ -265,8 +265,8 @@ def safe(this_robot, loc, game):
 def scared(this_robot, game):
     #################################################################
     # Added by Spencer, Matt - Never stay in spawn for the first turn
-    if game.turn % 10 == 1 and 'spawn' in rg.loc_types(this_robot.location):
-        return 1
+    # if game.turn % 10 == 1 and 'spawn' in rg.loc_types(this_robot.location) and surrounders(this_robot, game, this_robot.location) < 1:
+    #     return 1
     #################################################################
     num_surrounders = 0
     for bot in one_robots:
@@ -352,19 +352,19 @@ def find_empty_space(this_robot, game, illegals):
 def pin_to_spawn(this_robot, game, illegals):
     global moves_to
     turns_left = (10 - game.turn) % 10
-    # if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
+    if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
 
-    if game.turn > 95 or turns_left > 2:
+    # if game.turn > 95 or turns_left > 2:
         return 'no_action'
     loc = this_robot.location
     for bot in one_robots:
         if bot.player_id != this_robot.player_id and (spawn(bot.location) and not_spawn(loc) and not (loc in illegals)):
-            sacrifice_to_guard = turns_left * 5
-            sacrifice_to_kill = math.ceil(bot.hp / 9)
-            if sacrifice_to_kill >= sacrifice_to_guard:
-                return ['guard']
-            else:
-                return ['attack', bot.location]
+            # sacrifice_to_guard = turns_left * 5
+            # sacrifice_to_kill = math.ceil(bot.hp / 9)
+            # if sacrifice_to_kill >= sacrifice_to_guard:
+            return ['guard']
+            # else:
+            #     return ['attack', bot.location]
             # return ['guard']
     for bot in two_robots:
         if bot.player_id != this_robot.player_id and spawn(bot.location):
@@ -518,10 +518,10 @@ class Robot:
             illegals_global = set()
 
         # Capture friendly moves to avoid team collisions
-        the_action = act_with_consideration(self, game, illegals_global)
+        the_action = act_with_consideration(self, game, set())
         if the_action[0] == 'move':
             moves_to[self.location] = the_action[1]
-        else:
-            illegals_global.add(self.location)
+        # else:
+        #    illegals_global.add(self.location)
 
         return the_action
