@@ -23,6 +23,9 @@ main_axis_weight = 0.5
 # turn.
 hp_to_pin = {0: 6, 1: 11, 2: 51, 3: 51, 4: 51, 5: 51, 6: 51, 7: 51, 8: 51, 9: 51, 10: 51}
 
+quadrant_centers = {0: (5, 5), 1: (13, 5), 2: (5, 13), 3: (13, 13)}
+worst_ratio_quadrant = 0
+
 canonical_spawn_locs = []
 for spawn_x in range(10):
     for spawn_y in range(10):
@@ -236,7 +239,7 @@ def strong_hunt_the_weak(this_robot, game, illegals):
                     best_move = ['attack', bot.location]
                     weakest_enemy = bot.hp
     for bot in two_robots:
-        if bot.player_id != this_robot.player_id and bot.hp < weakest_enemy:
+        if bot.player_id != this_robot.player_id and bot.hp < weakest_enemy_hp:
             targetx = towardsx_if_not_spawn(this_robot.location, bot.location)
             targety = towardsy_if_not_spawn(this_robot.location, bot.location)
             if targetx != 'no_move' and not (targetx in illegals or surrounders(this_robot, game, targetx) > 1):
@@ -265,8 +268,8 @@ def safe(this_robot, loc, game):
 def scared(this_robot, game):
     #################################################################
     # Added by Spencer, Matt - Never stay in spawn for the first turn
-    # if game.turn % 10 == 1 and 'spawn' in rg.loc_types(this_robot.location) and surrounders(this_robot, game, this_robot.location) < 1:
-    #     return 1
+    if (10 - game.turn) % 10 < 3 and 'spawn' in rg.loc_types(this_robot.location):
+        return 1
     #################################################################
     num_surrounders = 0
     for bot in one_robots:
@@ -341,7 +344,7 @@ def find_empty_space(this_robot, game, illegals):
         best_score = -10000
     for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
         score = empty_score(this_robot, loc2, game)
-        if loc2 in illegals or (loc2 in moves_to and moves_to[loc2] == loc):
+        if loc2 in illegals or (loc2 in moves_to and moves_to[loc2] == loc) or (loc2 in game.robots and loc2 not in moves_to):
             score -= 10000
         if score > best_score:
             best_score = score
@@ -511,11 +514,42 @@ class Robot:
         global last_turn
         global moves_to
         global illegals_global
+        global worst_ratio_quadrant
         # Init round turn
         if last_turn != game.turn:
             last_turn = game.turn
             moves_to = {}  # Reset moves_to for each new round
             illegals_global = set()
+            quadrants = {0: [0, 0], 1: [0, 0], 2: [0, 0], 3: [0, 0]}
+            worst_ratio_quadrant = 0
+            for bot in game.robots:
+                if bot[0] <= 9:
+                    if bot[1] <= 9:
+                        if game.robots[bot].player_id != self.player_id:
+                            quadrants[0][1] += 1
+                        else:
+                            quadrants[0][0] += 1
+                    else:
+                        if game.robots[bot].player_id != self.player_id:
+                            quadrants[2][1] += 1
+                        else:
+                            quadrants[2][0] += 1
+                else:
+                    if bot[1] <= 9:
+                        if game.robots[bot].player_id != self.player_id:
+                            quadrants[1][1] += 1
+                        else:
+                            quadrants[1][0] += 1
+                    else:
+                        if game.robots[bot].player_id != self.player_id:
+                            quadrants[3][1] += 1
+                        else:
+                            quadrants[3][0] += 1
+            worst_ratio = 100
+            for i in range(4):
+                if quadrants[i][1] > 0 and quadrants[i][0] / quadrants[i][1] < worst_ratio:
+                    worst_ratio = quadrants[i][0] / quadrants[i][1]
+                    worst_ratio_quadrant = i
 
         # Capture friendly moves to avoid team collisions
         the_action = act_with_consideration(self, game, set())
@@ -524,9 +558,22 @@ class Robot:
         # else:
         #    illegals_global.add(self.location)
         if the_action[0] == 'guard':
+            max_tile_score = 0
             for loc2 in rg.locs_around(self.location, filter_out=('invalid', 'obstacle')):
                 if loc2 in game.robots and game.robots[loc2].player_id != self.player_id:
                     return ['attack', loc2]
                 elif loc2 not in game.robots:
-                    the_action = ['attack', loc2]
+                    tile_score = 0
+                    for loc3 in rg.locs_around(loc2, filter_out=('invalid', 'obstacle')):
+                        if loc3 in game.robots and game.robots[loc3].player_id != self.player_id:
+                            tile_score += 1
+                    if tile_score > max_tile_score:
+                        max_tile_score = tile_score
+                        the_action = ['attack', loc2]
+            if the_action[0] != 'guard':
+                return the_action
+            # quadrant_center = quadrant_centers[worst_ratio_quadrant]
+            # move = move_towards_either_axis(self.location, quadrant_center, game.turn)
+            # if move != 'no_move' and move != self.location:
+            #     the_action = ['move', move]
         return the_action
