@@ -33,6 +33,9 @@ for spawn_x in range(10):
 
 one_robots = []
 two_robots = []
+moves_to = {}
+illegals_global = set()
+last_turn = -1
 
 
 def urgency(bot1):
@@ -276,6 +279,7 @@ def scared(this_robot, game):
 
 
 def run_if_scared_and_safe(this_robot, game, illegals):
+    global moves_to
     if not scared(this_robot, game):
         return 'no_action'
     best_distance = 1000
@@ -315,6 +319,7 @@ def empty_score(this_robot, loc, game):
 
 
 def find_empty_space(this_robot, game, illegals):
+    global moves_to
     loc = this_robot.location
     best_score = empty_score(this_robot, loc, game) + staying_still_bonus
     move = ['guard']
@@ -322,7 +327,7 @@ def find_empty_space(this_robot, game, illegals):
         best_score = -10000
     for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
         score = empty_score(this_robot, loc2, game)
-        if loc2 in illegals:
+        if loc2 in illegals or (loc2 in moves_to and moves_to[loc2] == loc):
             score -= 10000
         if score > best_score:
             best_score = score
@@ -331,6 +336,7 @@ def find_empty_space(this_robot, game, illegals):
 
 
 def pin_to_spawn(this_robot, game, illegals):
+    global moves_to
     turns_left = (10 - game.turn) % 10
     # if game.turn > 95 or this_robot.hp < hp_to_pin[turns_left]:
 
@@ -339,21 +345,20 @@ def pin_to_spawn(this_robot, game, illegals):
     loc = this_robot.location
     for bot in one_robots:
         if bot.player_id != this_robot.player_id and (spawn(bot.location) and not_spawn(loc) and not (loc in illegals)):
-            if turns_left == 1:
-                # find free location to move away from spawn to
-                return find_empty_space_punish_spawn(this_robot, game, illegals)
             sacrifice_to_guard = turns_left * 5
             sacrifice_to_kill = math.ceil(bot.hp / 9)
             if sacrifice_to_kill >= sacrifice_to_guard:
                 return ['guard']
             else:
                 return ['attack', bot.location]
+            # return ['guard']
     for bot in two_robots:
         if bot.player_id != this_robot.player_id and spawn(bot.location):
             block_square = move_towards_either_axis(loc, bot.location, game.turn)
             if block_square == 'no_move':
                 return 'no_action'
-            if not_spawn(block_square) and not (block_square in illegals):
+            if not_spawn(block_square) and not (
+                    block_square in illegals or (block_square in moves_to and moves_to[block_square] == loc)):
                 return ['move', block_square]
     return 'no_action'
 
@@ -361,6 +366,7 @@ def pin_to_spawn(this_robot, game, illegals):
 def tentative_act(this_robot, game, illegals):
     global one_robots
     global two_robots
+    global moves_to
     one_robots = []
     two_robots = []
     locx = this_robot.location[0]
@@ -412,6 +418,7 @@ def empty_score_punish_spawn(this_robot, loc, game):
 
 
 def find_empty_space_punish_spawn(this_robot, game, illegals):
+    global moves_to
     loc = this_robot.location
     best_score = empty_score_punish_spawn(this_robot, loc, game) + staying_still_bonus
     move = ['guard']
@@ -419,7 +426,7 @@ def find_empty_space_punish_spawn(this_robot, game, illegals):
         best_score = -10000
     for loc2 in rg.locs_around(loc, filter_out=('obstacle', 'invalid')):
         score = empty_score_punish_spawn(this_robot, loc2, game)
-        if loc2 in illegals:
+        if loc2 in illegals or (loc2 in moves_to and moves_to[loc2] == loc):
             score = -10000
         if score > best_score:
             best_score = score
