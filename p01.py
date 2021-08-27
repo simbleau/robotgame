@@ -273,8 +273,8 @@ def safe(this_robot, loc, game):
 def scared(this_robot, game):
     #################################################################
     # Added by Spencer, Matt - Never stay in spawn for the first turn
-    if (10 - game.turn) % 10 < 3 and 'spawn' in rg.loc_types(this_robot.location):
-        return 1
+    # if (10 - game.turn) % 10 < 3 and 'spawn' in rg.loc_types(this_robot.location):
+    #     return 1
     #################################################################
     num_surrounders = 0
     for bot in one_robots:
