@@ -222,7 +222,7 @@ def attack_if_possible(this_robot, illegals):
 def strong_hunt_the_weak(this_robot, game, illegals):
     if this_robot.hp < 30:
         return 'no_action'
-    weakest_enemy = 20
+    weakest_enemy = 30
     best_move = 'no_action'
     for bot in one_robots:
         if bot.player_id != this_robot.player_id:
@@ -523,5 +523,10 @@ class Robot:
             moves_to[self.location] = the_action[1]
         # else:
         #    illegals_global.add(self.location)
-
+        if the_action[0] == 'guard':
+            for loc2 in rg.locs_around(self.location, filter_out=('invalid', 'obstacle')):
+                if loc2 in game.robots and game.robots[loc2].player_id != self.player_id:
+                    return ['attack', loc2]
+                elif loc2 not in game.robots:
+                    the_action = ['attack', loc2]
         return the_action
