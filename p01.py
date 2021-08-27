@@ -45,7 +45,7 @@ def urgency(bot1):
 def greater(bot1, bot2):
     if urgency(bot1) > urgency(bot2):
         return 1
-#    if urgency(bot2) > urgency(bot1):
+    #    if urgency(bot2) > urgency(bot1):
     return 0
     # deliberately runs off the edge; this should be impossible.
 
@@ -166,7 +166,8 @@ def move_towards_either_axis(loc, dest, turn):
 
 
 def destruct_if_doomed_us(this_robot, game, illegals):
-    if this_robot.location in illegals or surrounders(this_robot, game, this_robot.location) * suicide_param <= this_robot.hp:
+    if this_robot.location in illegals or surrounders(this_robot, game,
+                                                      this_robot.location) * suicide_param <= this_robot.hp:
         return 'no_action'
     return ['suicide']
 
@@ -228,7 +229,7 @@ def strong_hunt_the_weak(this_robot, game, illegals):
             if bot.hp < weakest_enemy:
                 weakest_enemy = bot.hp
                 if bot.hp <= 5 and not (bot.location in illegals) and (
-                            not surrounders(this_robot, game, bot.location) > 1):
+                        not surrounders(this_robot, game, bot.location) > 1):
                     best_move = ['move', bot.location]
                     weakest_enemy = bot.hp
                 elif this_robot.location not in illegals:
@@ -271,7 +272,8 @@ def scared(this_robot, game):
     for bot in one_robots:
         if bot.player_id != this_robot.player_id:
             num_surrounders += 1
-            if destruct_if_doomed_enemy(bot, game) != 'no_action' or (bot.hp > this_robot.hp and (surrounders(bot, game, bot.location) == 1 or this_robot.hp < 16)):
+            if destruct_if_doomed_enemy(bot, game) != 'no_action' or (
+                    bot.hp > this_robot.hp and (surrounders(bot, game, bot.location) == 1 or this_robot.hp < 16)):
                 return 1
     if num_surrounders > 1:
         return 1
@@ -284,8 +286,20 @@ def run_if_scared_and_safe(this_robot, game, illegals):
         return 'no_action'
     best_distance = 1000
     move = 'no_action'
+
+    # # Make a list of scared friendly locations
+    # friendly_scared = set()
+    # for robot in game.robots:
+    #     if scared(game.robots[robot], game):
+    #         friendly_scared.add(robot)
+    # print(friendly_scared)
+
     for loc in rg.locs_around(this_robot.location, filter_out=('obstacle', 'invalid', 'spawn')):
-        if not (loc in illegals) and safe(this_robot, loc, game) == 1 and rg.dist(loc, rg.CENTER_POINT) < best_distance:
+        # check if friendlies are scared. filter those out too
+        if not (loc in illegals) and (loc not in moves_to or moves_to[loc] != this_robot.location) and safe(this_robot,
+                                                                                                            loc,
+                                                                                                            game) == 1 and rg.dist(
+            loc, rg.CENTER_POINT) < best_distance:
             best_distance = rg.dist(loc, rg.CENTER_POINT)
             move = ['move', loc]
     return move
@@ -480,7 +494,7 @@ def act_with_consideration(this_robot, game, illegals):
                         if (checkx, checky) in game.robots:
                             cand = game.robots[(checkx, checky)]
                             if (cand.player_id == this_robot.player_id and greater(cand, bot) and not (
-                                        cand in bots_to_consider)):
+                                    cand in bots_to_consider)):
                                 new_bots.append(cand)
                                 bots_to_consider.append(cand)
     sorted_bots = sorted(bots_to_consider, key=lambda b: -urgency(b))
@@ -494,4 +508,20 @@ def act_with_consideration(this_robot, game, illegals):
 
 class Robot:
     def act(self, game):
-        return act_with_consideration(self, game, set())
+        global last_turn
+        global moves_to
+        global illegals_global
+        # Init round turn
+        if last_turn != game.turn:
+            last_turn = game.turn
+            moves_to = {}  # Reset moves_to for each new round
+            illegals_global = set()
+
+        # Capture friendly moves to avoid team collisions
+        the_action = act_with_consideration(self, game, illegals_global)
+        if the_action[0] == 'move':
+            moves_to[self.location] = the_action[1]
+        else:
+            illegals_global.add(self.location)
+
+        return the_action
