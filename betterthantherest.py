@@ -2,7 +2,6 @@
 # http://robotgame.org/viewrobot/6684
 
 import rg
-import operator
 
 
 class Robot:
