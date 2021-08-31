@@ -17,7 +17,7 @@ class Robot:
             return ['guard']
 
         # if there are enemies around, attack them
-        for loc, bot in game.robots.iteritems():
+        for loc, bot in game.robots.items():
             if bot.player_id != self.player_id:
                 if rg.dist(loc, self.location) <= 1:
                     return ['attack', loc]
